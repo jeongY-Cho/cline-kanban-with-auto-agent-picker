@@ -67,7 +67,9 @@
     "test:precommit": "npm run test:fast",
     "test:watch": "vitest",
     "prepare": "husky",
-    "prepublishOnly": "npm run build && npm run check"
+    "prepublishOnly": "npm run build && npm run check",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
   },
   "license": "Apache-2.0",
   "devDependencies": {
@@ -81,7 +83,9 @@
     "shx": "^0.4.0",
     "tsx": "^4.20.3",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.0",
+    "@types/better-sqlite3": "^7.6.12",
+    "drizzle-kit": "^0.31.7"
   },
   "optionalDependencies": {
     "@biomejs/cli-linux-arm64": "2.3.5",
@@ -106,6 +110,8 @@
     "proper-lockfile": "^4.1.2",
     "tree-kill": "^1.2.2",
     "ws": "^8.18.0",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "better-sqlite3": "^11.10.0",
+    "drizzle-orm": "^0.44.2"
   }
 }
