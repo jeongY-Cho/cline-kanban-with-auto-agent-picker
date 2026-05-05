@@ -73,3 +73,12 @@ Click the branch name in the navbar to open a full git interface to browse commi
 ---
 
 [Apache 2.0 © 2026 Cline Bot Inc.](./LICENSE)
+
+## Database migrations (Drizzle + SQLite)
+
+Kanban now includes Drizzle ORM tooling for a local SQLite database stored at `~/.cline/kanban/kanban.db`.
+
+```bash
+npm run db:generate  # Generate SQL migrations from src/server/db/schema.ts
+npm run db:migrate   # Apply generated migrations to the local SQLite database
+```
