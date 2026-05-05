@@ -45,7 +45,7 @@ import { createRuntimeApi } from "../trpc/runtime-api";
 import { createWorkspaceApi } from "../trpc/workspace-api";
 import { getWebUiDir, normalizeRequestPath, readAsset } from "./assets";
 import { handleHttpRequest, handleSocketUpgrade } from "./middleware";
-import { createJsonWorkspaceStore } from "./persistence/json-workspace-store";
+import { createWorkspaceStoreFromEnv } from "./persistence/select-workspace-store";
 import type { RuntimeStateHub } from "./runtime-state-hub";
 import type { WorkspaceRegistry } from "./workspace-registry";
 
@@ -102,7 +102,7 @@ function readWorkspaceIdFromRequest(request: IncomingMessage, requestUrl: URL): 
 
 export async function createRuntimeServer(deps: CreateRuntimeServerDependencies): Promise<RuntimeServer> {
 	const webUiDir = getWebUiDir();
-	const workspaceStore = createJsonWorkspaceStore();
+	const workspaceStore = createWorkspaceStoreFromEnv();
 
 	try {
 		await readFile(join(webUiDir, "index.html"));
@@ -241,6 +241,7 @@ export async function createRuntimeServer(deps: CreateRuntimeServerDependencies)
 				buildProjectsPayload: deps.workspaceRegistry.buildProjectsPayload,
 				pickDirectoryPathFromSystemDialog: deps.pickDirectoryPathFromSystemDialog,
 				serverCwd: process.cwd(),
+				workspaceStore,
 			}),
 			hooksApi: createHooksApi({
 				getWorkspacePathById: deps.workspaceRegistry.getWorkspacePathById,

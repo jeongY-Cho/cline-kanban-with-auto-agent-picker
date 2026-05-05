@@ -8,6 +8,7 @@ export const workspaces = sqliteTable(
 		name: text("name"),
 		createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
 		updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+		version: integer("version").notNull().default(0),
 	},
 	(table) => [uniqueIndex("workspaces_repo_path_unique").on(table.repoPath)],
 );
@@ -23,6 +24,7 @@ export const boardColumns = sqliteTable(
 		position: integer("position").notNull(),
 		createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
 		updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+		version: integer("version").notNull().default(0),
 	},
 	(table) => [index("board_columns_workspace_position_idx").on(table.workspaceId, table.position)],
 );
@@ -44,6 +46,7 @@ export const cards = sqliteTable(
 		metadataJson: text("metadata_json"),
 		createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
 		updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+		version: integer("version").notNull().default(0),
 	},
 	(table) => [
 		index("cards_workspace_column_position_idx").on(table.workspaceId, table.columnId, table.position),

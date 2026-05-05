@@ -8,6 +8,7 @@ import type {
 	RuntimeProjectTaskCounts,
 } from "../core/api-contract";
 import { parseDirectoryListRequest, parseProjectAddRequest, parseProjectRemoveRequest } from "../core/api-validation";
+import type { WorkspaceStore } from "../server/persistence/workspace-store";
 import {
 	listWorkspaceIndexEntries,
 	loadWorkspaceContext,
@@ -56,6 +57,15 @@ export interface CreateProjectsApiDependencies {
 	}>;
 	pickDirectoryPathFromSystemDialog: () => string | null;
 	serverCwd: string;
+	workspaceStore?: Pick<
+		WorkspaceStore,
+		| "listWorkspaceIndexEntries"
+		| "loadWorkspaceContext"
+		| "loadWorkspaceContextById"
+		| "loadWorkspaceState"
+		| "removeWorkspaceIndexEntry"
+		| "removeWorkspaceStateFiles"
+	>;
 }
 
 export function createProjectsApi(deps: CreateProjectsApiDependencies): RuntimeTrpcContext["projectsApi"] {
@@ -72,7 +82,7 @@ export function createProjectsApi(deps: CreateProjectsApiDependencies): RuntimeT
 		addProject: async (preferredWorkspaceId, input) => {
 			const body = parseProjectAddRequest(input);
 			const preferredWorkspaceContext = preferredWorkspaceId
-				? await loadWorkspaceContextById(preferredWorkspaceId)
+				? await (deps.workspaceStore?.loadWorkspaceContextById ?? loadWorkspaceContextById)(preferredWorkspaceId)
 				: null;
 			const resolveBasePath = preferredWorkspaceContext?.repoPath ?? deps.getActiveWorkspacePath() ?? process.cwd();
 			try {
@@ -126,9 +136,11 @@ export function createProjectsApi(deps: CreateProjectsApiDependencies): RuntimeT
 						} satisfies RuntimeProjectAddResponse;
 					}
 				}
-				const context = await loadWorkspaceContext(projectPath);
+				const context = await (deps.workspaceStore?.loadWorkspaceContext ?? loadWorkspaceContext)(projectPath);
 				deps.rememberWorkspace(context.workspaceId, context.repoPath);
-				const projectsAfterAdd = await listWorkspaceIndexEntries();
+				const projectsAfterAdd = await (
+					deps.workspaceStore?.listWorkspaceIndexEntries ?? listWorkspaceIndexEntries
+				)();
 				const activeWorkspaceId = deps.getActiveWorkspaceId();
 				const hasActiveWorkspace = activeWorkspaceId
 					? projectsAfterAdd.some((project) => project.workspaceId === activeWorkspaceId)
@@ -158,7 +170,9 @@ export function createProjectsApi(deps: CreateProjectsApiDependencies): RuntimeT
 		removeProject: async (_preferredWorkspaceId, input) => {
 			try {
 				const body = parseProjectRemoveRequest(input);
-				const projectsBeforeRemoval = await listWorkspaceIndexEntries();
+				const projectsBeforeRemoval = await (
+					deps.workspaceStore?.listWorkspaceIndexEntries ?? listWorkspaceIndexEntries
+				)();
 				const projectToRemove = projectsBeforeRemoval.find((project) => project.workspaceId === body.projectId);
 				if (!projectToRemove) {
 					return {
@@ -169,7 +183,9 @@ export function createProjectsApi(deps: CreateProjectsApiDependencies): RuntimeT
 
 				const taskIdsToCleanup = new Set<string>();
 				try {
-					const workspaceState = await loadWorkspaceState(projectToRemove.repoPath);
+					const workspaceState = await (deps.workspaceStore?.loadWorkspaceState ?? loadWorkspaceState)(
+						projectToRemove.repoPath,
+					);
 					for (const taskId of deps.collectProjectWorktreeTaskIdsForRemoval(workspaceState.board)) {
 						taskIdsToCleanup.add(taskId);
 					}
@@ -182,17 +198,19 @@ export function createProjectsApi(deps: CreateProjectsApiDependencies): RuntimeT
 					removedTerminalManager.markInterruptedAndStopAll();
 				}
 
-				const removed = await removeWorkspaceIndexEntry(body.projectId);
+				const removed = await (deps.workspaceStore?.removeWorkspaceIndexEntry ?? removeWorkspaceIndexEntry)(
+					body.projectId,
+				);
 				if (!removed) {
 					throw new Error(`Could not remove project index entry for "${body.projectId}".`);
 				}
-				await removeWorkspaceStateFiles(body.projectId);
+				await (deps.workspaceStore?.removeWorkspaceStateFiles ?? removeWorkspaceStateFiles)(body.projectId);
 				deps.disposeWorkspace(body.projectId, {
 					stopTerminalSessions: false,
 				});
 
 				if (deps.getActiveWorkspaceId() === body.projectId) {
-					const remaining = await listWorkspaceIndexEntries();
+					const remaining = await (deps.workspaceStore?.listWorkspaceIndexEntries ?? listWorkspaceIndexEntries)();
 					const fallbackWorkspace = remaining[0];
 					if (fallbackWorkspace) {
 						await deps.setActiveWorkspace(fallbackWorkspace.workspaceId, fallbackWorkspace.repoPath);
