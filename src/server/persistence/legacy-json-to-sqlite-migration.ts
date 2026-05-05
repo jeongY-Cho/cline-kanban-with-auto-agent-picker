@@ -99,45 +99,42 @@ export async function runLegacyJsonToSqliteMigration(log: (message: string) => v
 			const meta = workspaceMetaSchema.parse(metaRaw ?? { revision: 0, updatedAt: 0 });
 			const now = new Date(meta.updatedAt || Date.now());
 
-			await db.transaction((tx) => {
-				tx.insert(schema.workspaces)
+			await db.transaction(async (tx) => {
+				await tx
+					.insert(schema.workspaces)
 					.values({ id: workspaceId, repoPath: entry.repoPath, name: null, createdAt: now, updatedAt: now })
-					.onConflictDoUpdate({ target: schema.workspaces.id, set: { repoPath: entry.repoPath, updatedAt: now } })
-					.run();
-				tx.delete(schema.cards).where(eq(schema.cards.workspaceId, workspaceId)).run();
-				tx.delete(schema.boardColumns).where(eq(schema.boardColumns.workspaceId, workspaceId)).run();
+					.onConflictDoUpdate({ target: schema.workspaces.id, set: { repoPath: entry.repoPath, updatedAt: now } });
+				await tx.delete(schema.cards).where(eq(schema.cards.workspaceId, workspaceId));
+				await tx.delete(schema.boardColumns).where(eq(schema.boardColumns.workspaceId, workspaceId));
 
 				for (const [columnIndex, column] of board.columns.entries()) {
 					const columnDbId = `${workspaceId}:${column.id}`;
-					tx.insert(schema.boardColumns)
-						.values({
-							id: columnDbId,
-							workspaceId,
-							title: column.title,
-							position: columnIndex,
-							createdAt: now,
-							updatedAt: now,
-						})
-						.run();
+					await tx.insert(schema.boardColumns).values({
+						id: columnDbId,
+						workspaceId,
+						title: column.title,
+						position: columnIndex,
+						createdAt: now,
+						updatedAt: now,
+					});
 					for (const [cardIndex, card] of column.cards.entries()) {
-						tx.insert(schema.cards)
-							.values({
-								id: card.id,
-								workspaceId,
-								columnId: columnDbId,
-								title: card.title,
-								description: null,
-								status: column.id,
-								position: cardIndex,
-								metadataJson: null,
-								createdAt: new Date(card.createdAt),
-								updatedAt: new Date(card.updatedAt),
-							})
-							.run();
+						await tx.insert(schema.cards).values({
+							id: card.id,
+							workspaceId,
+							columnId: columnDbId,
+							title: card.title,
+							description: null,
+							status: column.id,
+							position: cardIndex,
+							metadataJson: null,
+							createdAt: new Date(card.createdAt),
+							updatedAt: new Date(card.updatedAt),
+						});
 					}
 				}
 
-				tx.insert(schema.workspaceSnapshots)
+				await tx
+					.insert(schema.workspaceSnapshots)
 					.values({
 						id: `${workspaceId}:${meta.revision}`,
 						workspaceId,
@@ -148,8 +145,7 @@ export async function runLegacyJsonToSqliteMigration(log: (message: string) => v
 					.onConflictDoUpdate({
 						target: [schema.workspaceSnapshots.workspaceId, schema.workspaceSnapshots.revision],
 						set: { snapshotJson: JSON.stringify({ board, sessions }), createdAt: now },
-					})
-					.run();
+					});
 			});
 			await Promise.all([backupLegacyFile(boardPath), backupLegacyFile(sessionsPath), backupLegacyFile(metaPath)]);
 			migrated.push(workspaceId);

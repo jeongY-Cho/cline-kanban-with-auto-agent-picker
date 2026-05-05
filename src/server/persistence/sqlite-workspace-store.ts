@@ -102,57 +102,50 @@ export function createSqliteWorkspaceStore(): WorkspaceStore {
 			const currentRevision = existing?.version ?? 0;
 			if (typeof parsed.expectedRevision === "number" && parsed.expectedRevision !== currentRevision)
 				throw new WorkspaceStateConflictError(parsed.expectedRevision, currentRevision);
-			await db.transaction((tx) => {
+			await db.transaction(async (tx) => {
 				if (!existing) {
-					tx.insert(schema.workspaces)
-						.values({
-							id: context.workspaceId,
-							repoPath: context.repoPath,
-							name: null,
-							createdAt: now,
-							updatedAt: now,
-							version: 1,
-						})
-						.run();
+					await tx.insert(schema.workspaces).values({
+						id: context.workspaceId,
+						repoPath: context.repoPath,
+						name: null,
+						createdAt: now,
+						updatedAt: now,
+						version: 1,
+					});
 				} else {
 					const next = currentRevision + 1;
-					const updated = tx
+					const updated = await tx
 						.update(schema.workspaces)
 						.set({ updatedAt: now, version: next })
 						.where(
 							and(eq(schema.workspaces.id, context.workspaceId), eq(schema.workspaces.version, currentRevision)),
-						)
-						.run();
+						);
 					if (updated.changes === 0) throw new WorkspaceStateConflictError(currentRevision, currentRevision);
 				}
-				tx.delete(schema.cards).where(eq(schema.cards.workspaceId, context.workspaceId)).run();
-				tx.delete(schema.boardColumns).where(eq(schema.boardColumns.workspaceId, context.workspaceId)).run();
+				await tx.delete(schema.cards).where(eq(schema.cards.workspaceId, context.workspaceId));
+				await tx.delete(schema.boardColumns).where(eq(schema.boardColumns.workspaceId, context.workspaceId));
 				for (const [i, col] of parsed.board.columns.entries()) {
-					tx.insert(schema.boardColumns)
-						.values({
-							id: scopedColumnId(context.workspaceId, col.id),
+					await tx.insert(schema.boardColumns).values({
+						id: scopedColumnId(context.workspaceId, col.id),
+						workspaceId: context.workspaceId,
+						title: col.title,
+						position: i,
+						createdAt: now,
+						updatedAt: now,
+					});
+					for (const [j, card] of col.cards.entries()) {
+						await tx.insert(schema.cards).values({
+							id: card.id,
 							workspaceId: context.workspaceId,
-							title: col.title,
-							position: i,
+							columnId: scopedColumnId(context.workspaceId, col.id),
+							title: card.title ?? "",
+							description: card.prompt,
+							status: col.id,
+							position: j,
+							metadataJson: JSON.stringify(card),
 							createdAt: now,
 							updatedAt: now,
-						})
-						.run();
-					for (const [j, card] of col.cards.entries()) {
-						tx.insert(schema.cards)
-							.values({
-								id: card.id,
-								workspaceId: context.workspaceId,
-								columnId: scopedColumnId(context.workspaceId, col.id),
-								title: card.title ?? "",
-								description: card.prompt,
-								status: col.id,
-								position: j,
-								metadataJson: JSON.stringify(card),
-								createdAt: now,
-								updatedAt: now,
-							})
-							.run();
+						});
 					}
 				}
 			});
