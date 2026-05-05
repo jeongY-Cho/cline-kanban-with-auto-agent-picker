@@ -32,6 +32,7 @@ import {
 } from "./core/runtime-endpoint";
 import { disablePasscode, generateInternalToken, generatePasscode } from "./security/passcode-manager";
 import { createWorkspaceStoreFromEnv } from "./server/persistence/select-workspace-store";
+import { runLegacyJsonToSqliteMigration } from "./server/persistence/legacy-json-to-sqlite-migration";
 import { terminateProcessForTimeout } from "./server/process-termination";
 import type { RuntimeStateHub } from "./server/runtime-state-hub";
 import { captureNodeException, flushNodeTelemetry } from "./telemetry/sentry-node.js";
@@ -408,6 +409,10 @@ async function startServer(): Promise<{
 		import("./update/update.js"),
 	]);
 	let runtimeStateHub: RuntimeStateHub | undefined;
+	
+	await runLegacyJsonToSqliteMigration((message) => {
+		console.info(message);
+	});
 	const workspaceStore = createWorkspaceStoreFromEnv();
 	const workspaceRegistry = await createWorkspaceRegistry({
 		cwd: process.cwd(),
