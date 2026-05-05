@@ -99,17 +99,17 @@ export async function runLegacyJsonToSqliteMigration(log: (message: string) => v
 			const meta = workspaceMetaSchema.parse(metaRaw ?? { revision: 0, updatedAt: 0 });
 			const now = new Date(meta.updatedAt || Date.now());
 
-			await db.transaction(async (tx: typeof db) => {
-				await tx
-					.insert(schema.workspaces)
+			await db.transaction((tx) => {
+				tx.insert(schema.workspaces)
 					.values({ id: workspaceId, repoPath: entry.repoPath, name: null, createdAt: now, updatedAt: now })
-					.onConflictDoUpdate({ target: schema.workspaces.id, set: { repoPath: entry.repoPath, updatedAt: now } });
-				await tx.delete(schema.cards).where(eq(schema.cards.workspaceId, workspaceId));
-				await tx.delete(schema.boardColumns).where(eq(schema.boardColumns.workspaceId, workspaceId));
+					.onConflictDoUpdate({ target: schema.workspaces.id, set: { repoPath: entry.repoPath, updatedAt: now } })
+					.run();
+				tx.delete(schema.cards).where(eq(schema.cards.workspaceId, workspaceId)).run();
+				tx.delete(schema.boardColumns).where(eq(schema.boardColumns.workspaceId, workspaceId)).run();
 
 				for (const [columnIndex, column] of board.columns.entries()) {
 					const columnDbId = `${workspaceId}:${column.id}`;
-					await tx.insert(schema.boardColumns).values({
+					tx.insert(schema.boardColumns).values({
 						id: columnDbId,
 						workspaceId,
 						title: column.title,
@@ -118,7 +118,7 @@ export async function runLegacyJsonToSqliteMigration(log: (message: string) => v
 						updatedAt: now,
 					});
 					for (const [cardIndex, card] of column.cards.entries()) {
-						await tx.insert(schema.cards).values({
+						tx.insert(schema.cards).values({
 							id: card.id,
 							workspaceId,
 							columnId: columnDbId,
@@ -133,8 +133,7 @@ export async function runLegacyJsonToSqliteMigration(log: (message: string) => v
 					}
 				}
 
-				await tx
-					.insert(schema.workspaceSnapshots)
+				tx.insert(schema.workspaceSnapshots)
 					.values({
 						id: `${workspaceId}:${meta.revision}`,
 						workspaceId,
@@ -145,7 +144,8 @@ export async function runLegacyJsonToSqliteMigration(log: (message: string) => v
 					.onConflictDoUpdate({
 						target: [schema.workspaceSnapshots.workspaceId, schema.workspaceSnapshots.revision],
 						set: { snapshotJson: JSON.stringify({ board, sessions }), createdAt: now },
-					});
+					})
+					.run();
 			});
 			await Promise.all([backupLegacyFile(boardPath), backupLegacyFile(sessionsPath), backupLegacyFile(metaPath)]);
 			migrated.push(workspaceId);

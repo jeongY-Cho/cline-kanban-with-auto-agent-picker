@@ -36,7 +36,8 @@ export function createSqliteWorkspaceStore(): WorkspaceStore {
 				.onConflictDoUpdate({
 					target: schema.workspaces.id,
 					set: { repoPath: context.repoPath, updatedAt: now },
-				});
+				})
+				.run();
 			return context;
 		},
 		loadWorkspaceContextById: async (workspaceId) => {
@@ -66,10 +67,9 @@ export function createSqliteWorkspaceStore(): WorkspaceStore {
 				.orderBy(asc(schema.cards.position), asc(schema.cards.id));
 			const cardsByCol = new Map<string, typeof cardRows>();
 			for (const c of cardRows) {
-				const columnId = unscopedColumnId(workspaceId, c.columnId);
-				const arr = cardsByCol.get(columnId) ?? [];
+				const arr = cardsByCol.get(c.columnId) ?? [];
 				arr.push(c);
-				cardsByCol.set(columnId, arr);
+				cardsByCol.set(c.columnId, arr);
 			}
 			return {
 				columns: cols.map((col) => ({
@@ -102,19 +102,21 @@ export function createSqliteWorkspaceStore(): WorkspaceStore {
 			const currentRevision = existing?.version ?? 0;
 			if (typeof parsed.expectedRevision === "number" && parsed.expectedRevision !== currentRevision)
 				throw new WorkspaceStateConflictError(parsed.expectedRevision, currentRevision);
-			await db.transaction(async (tx) => {
+			await db.transaction((tx) => {
 				if (!existing) {
-					await tx.insert(schema.workspaces).values({
-						id: context.workspaceId,
-						repoPath: context.repoPath,
-						name: null,
-						createdAt: now,
-						updatedAt: now,
-						version: 1,
-					});
+					tx.insert(schema.workspaces)
+						.values({
+							id: context.workspaceId,
+							repoPath: context.repoPath,
+							name: null,
+							createdAt: now,
+							updatedAt: now,
+							version: 1,
+						})
+						.run();
 				} else {
 					const next = currentRevision + 1;
-					const updated = await tx
+					const updated = tx
 						.update(schema.workspaces)
 						.set({ updatedAt: now, version: next })
 						.where(
@@ -123,10 +125,10 @@ export function createSqliteWorkspaceStore(): WorkspaceStore {
 						.run();
 					if (updated.changes === 0) throw new WorkspaceStateConflictError(currentRevision, currentRevision);
 				}
-				await tx.delete(schema.cards).where(eq(schema.cards.workspaceId, context.workspaceId));
-				await tx.delete(schema.boardColumns).where(eq(schema.boardColumns.workspaceId, context.workspaceId));
+				tx.delete(schema.cards).where(eq(schema.cards.workspaceId, context.workspaceId)).run();
+				tx.delete(schema.boardColumns).where(eq(schema.boardColumns.workspaceId, context.workspaceId)).run();
 				for (const [i, col] of parsed.board.columns.entries()) {
-					await tx.insert(schema.boardColumns).values({
+					tx.insert(schema.boardColumns).values({
 						id: scopedColumnId(context.workspaceId, col.id),
 						workspaceId: context.workspaceId,
 						title: col.title,
@@ -135,7 +137,7 @@ export function createSqliteWorkspaceStore(): WorkspaceStore {
 						updatedAt: now,
 					});
 					for (const [j, card] of col.cards.entries()) {
-						await tx.insert(schema.cards).values({
+						tx.insert(schema.cards).values({
 							id: card.id,
 							workspaceId: context.workspaceId,
 							columnId: scopedColumnId(context.workspaceId, col.id),
