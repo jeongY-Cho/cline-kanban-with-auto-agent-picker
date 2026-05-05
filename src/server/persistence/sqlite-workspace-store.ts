@@ -20,7 +20,25 @@ function unscopedColumnId(workspaceId: string, scopedId: string): string {
 
 export function createSqliteWorkspaceStore(): WorkspaceStore {
 	return {
-		loadWorkspaceContext: async (cwd, options) => await loadWorkspaceContext(cwd, options),
+		loadWorkspaceContext: async (cwd, options) => {
+			const context = await loadWorkspaceContext(cwd, options);
+			const now = new Date();
+			await db
+				.insert(schema.workspaces)
+				.values({
+					id: context.workspaceId,
+					repoPath: context.repoPath,
+					name: null,
+					createdAt: now,
+					updatedAt: now,
+					version: 0,
+				})
+				.onConflictDoUpdate({
+					target: schema.workspaces.id,
+					set: { repoPath: context.repoPath, updatedAt: now },
+				});
+			return context;
+		},
 		loadWorkspaceContextById: async (workspaceId) => {
 			const ws = await db.query.workspaces.findFirst({ where: eq(schema.workspaces.id, workspaceId) });
 			if (!ws) return null;
