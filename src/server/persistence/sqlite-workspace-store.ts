@@ -9,6 +9,15 @@ import { loadWorkspaceContext, WorkspaceStateConflictError } from "../../state/w
 import { db, schema } from "../db/client";
 import type { WorkspaceStore } from "./workspace-store";
 
+function scopedColumnId(workspaceId: string, columnId: string): string {
+	return `${workspaceId}:${columnId}`;
+}
+
+function unscopedColumnId(workspaceId: string, scopedId: string): string {
+	const prefix = `${workspaceId}:`;
+	return scopedId.startsWith(prefix) ? scopedId.slice(prefix.length) : scopedId;
+}
+
 export function createSqliteWorkspaceStore(): WorkspaceStore {
 	return {
 		loadWorkspaceContext: async (cwd, options) => await loadWorkspaceContext(cwd, options),
@@ -39,13 +48,14 @@ export function createSqliteWorkspaceStore(): WorkspaceStore {
 				.orderBy(asc(schema.cards.position), asc(schema.cards.id));
 			const cardsByCol = new Map<string, typeof cardRows>();
 			for (const c of cardRows) {
-				const arr = cardsByCol.get(c.columnId) ?? [];
+				const columnId = unscopedColumnId(workspaceId, c.columnId);
+				const arr = cardsByCol.get(columnId) ?? [];
 				arr.push(c);
-				cardsByCol.set(c.columnId, arr);
+				cardsByCol.set(columnId, arr);
 			}
 			return {
 				columns: cols.map((col) => ({
-					id: col.id as RuntimeBoardData["columns"][number]["id"],
+					id: unscopedColumnId(workspaceId, col.id) as RuntimeBoardData["columns"][number]["id"],
 					title: col.title,
 					cards: (cardsByCol.get(col.id) ?? []).map((card) => JSON.parse(card.metadataJson ?? "{}")),
 				})),
@@ -99,7 +109,7 @@ export function createSqliteWorkspaceStore(): WorkspaceStore {
 				await tx.delete(schema.boardColumns).where(eq(schema.boardColumns.workspaceId, context.workspaceId));
 				for (const [i, col] of parsed.board.columns.entries()) {
 					await tx.insert(schema.boardColumns).values({
-						id: col.id,
+						id: scopedColumnId(context.workspaceId, col.id),
 						workspaceId: context.workspaceId,
 						title: col.title,
 						position: i,
@@ -110,7 +120,7 @@ export function createSqliteWorkspaceStore(): WorkspaceStore {
 						await tx.insert(schema.cards).values({
 							id: card.id,
 							workspaceId: context.workspaceId,
-							columnId: col.id,
+							columnId: scopedColumnId(context.workspaceId, col.id),
 							title: card.title ?? "",
 							description: card.prompt,
 							status: col.id,
