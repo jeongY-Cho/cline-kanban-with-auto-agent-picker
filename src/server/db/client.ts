@@ -8,7 +8,7 @@ import * as schema from "./schema";
 const dbPath = join(getRuntimeHomePath(), "kanban.db");
 mkdirSync(dirname(dbPath), { recursive: true });
 
-const sqlite = new Database(dbPath);
+export const sqlite = new Database(dbPath);
 sqlite.pragma("journal_mode = WAL");
 
 export const db = drizzle(sqlite, { schema });
