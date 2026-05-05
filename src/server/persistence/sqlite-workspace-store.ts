@@ -128,27 +128,31 @@ export function createSqliteWorkspaceStore(): WorkspaceStore {
 				tx.delete(schema.cards).where(eq(schema.cards.workspaceId, context.workspaceId)).run();
 				tx.delete(schema.boardColumns).where(eq(schema.boardColumns.workspaceId, context.workspaceId)).run();
 				for (const [i, col] of parsed.board.columns.entries()) {
-					tx.insert(schema.boardColumns).values({
-						id: scopedColumnId(context.workspaceId, col.id),
-						workspaceId: context.workspaceId,
-						title: col.title,
-						position: i,
-						createdAt: now,
-						updatedAt: now,
-					});
-					for (const [j, card] of col.cards.entries()) {
-						tx.insert(schema.cards).values({
-							id: card.id,
+					tx.insert(schema.boardColumns)
+						.values({
+							id: scopedColumnId(context.workspaceId, col.id),
 							workspaceId: context.workspaceId,
-							columnId: scopedColumnId(context.workspaceId, col.id),
-							title: card.title ?? "",
-							description: card.prompt,
-							status: col.id,
-							position: j,
-							metadataJson: JSON.stringify(card),
+							title: col.title,
+							position: i,
 							createdAt: now,
 							updatedAt: now,
-						});
+						})
+						.run();
+					for (const [j, card] of col.cards.entries()) {
+						tx.insert(schema.cards)
+							.values({
+								id: card.id,
+								workspaceId: context.workspaceId,
+								columnId: scopedColumnId(context.workspaceId, col.id),
+								title: card.title ?? "",
+								description: card.prompt,
+								status: col.id,
+								position: j,
+								metadataJson: JSON.stringify(card),
+								createdAt: now,
+								updatedAt: now,
+							})
+							.run();
 					}
 				}
 			});

@@ -109,27 +109,31 @@ export async function runLegacyJsonToSqliteMigration(log: (message: string) => v
 
 				for (const [columnIndex, column] of board.columns.entries()) {
 					const columnDbId = `${workspaceId}:${column.id}`;
-					tx.insert(schema.boardColumns).values({
-						id: columnDbId,
-						workspaceId,
-						title: column.title,
-						position: columnIndex,
-						createdAt: now,
-						updatedAt: now,
-					});
-					for (const [cardIndex, card] of column.cards.entries()) {
-						tx.insert(schema.cards).values({
-							id: card.id,
+					tx.insert(schema.boardColumns)
+						.values({
+							id: columnDbId,
 							workspaceId,
-							columnId: columnDbId,
-							title: card.title,
-							description: null,
-							status: column.id,
-							position: cardIndex,
-							metadataJson: null,
-							createdAt: new Date(card.createdAt),
-							updatedAt: new Date(card.updatedAt),
-						});
+							title: column.title,
+							position: columnIndex,
+							createdAt: now,
+							updatedAt: now,
+						})
+						.run();
+					for (const [cardIndex, card] of column.cards.entries()) {
+						tx.insert(schema.cards)
+							.values({
+								id: card.id,
+								workspaceId,
+								columnId: columnDbId,
+								title: card.title,
+								description: null,
+								status: column.id,
+								position: cardIndex,
+								metadataJson: null,
+								createdAt: new Date(card.createdAt),
+								updatedAt: new Date(card.updatedAt),
+							})
+							.run();
 					}
 				}
 
