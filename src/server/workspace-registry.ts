@@ -6,16 +6,9 @@ import type {
 	RuntimeProjectTaskCounts,
 	RuntimeWorkspaceStateResponse,
 } from "../core/api-contract";
-import {
-	listWorkspaceIndexEntries,
-	loadWorkspaceBoardById,
-	loadWorkspaceContext,
-	loadWorkspaceState,
-	type RuntimeWorkspaceIndexEntry,
-	removeWorkspaceIndexEntry,
-	removeWorkspaceStateFiles,
-} from "../state/workspace-state";
+import type { RuntimeWorkspaceIndexEntry } from "../state/workspace-state";
 import { TerminalSessionManager } from "../terminal/session-manager";
+import type { WorkspaceStore } from "./persistence/workspace-store";
 
 export interface WorkspaceRegistryScope {
 	workspaceId: string;
@@ -29,6 +22,7 @@ export interface CreateWorkspaceRegistryDependencies {
 	hasGitRepository: (path: string) => boolean;
 	pathIsDirectory: (path: string) => Promise<boolean>;
 	onTerminalManagerReady?: (workspaceId: string, manager: TerminalSessionManager) => void;
+	workspaceStore: WorkspaceStore;
 }
 
 export interface DisposeWorkspaceRegistryOptions {
@@ -185,10 +179,10 @@ function toProjectSummary(project: {
 
 export async function createWorkspaceRegistry(deps: CreateWorkspaceRegistryDependencies): Promise<WorkspaceRegistry> {
 	const launchedFromGitRepo = deps.hasGitRepository(deps.cwd);
-	const initialWorkspace = launchedFromGitRepo ? await loadWorkspaceContext(deps.cwd) : null;
+	const initialWorkspace = launchedFromGitRepo ? await deps.workspaceStore.loadWorkspaceContext(deps.cwd) : null;
 	let indexedWorkspace: RuntimeWorkspaceIndexEntry | null = null;
 	if (!initialWorkspace) {
-		const indexedWorkspaces = await listWorkspaceIndexEntries();
+		const indexedWorkspaces = await deps.workspaceStore.listWorkspaceIndexEntries();
 		indexedWorkspace = indexedWorkspaces[0] ?? null;
 	}
 
@@ -236,7 +230,7 @@ export async function createWorkspaceRegistry(deps: CreateWorkspaceRegistryDepen
 		const loading = (async () => {
 			const manager = new TerminalSessionManager();
 			try {
-				const existingWorkspace = await loadWorkspaceState(repoPath);
+				const existingWorkspace = await deps.workspaceStore.loadWorkspaceState(repoPath);
 				manager.hydrateFromRecord(existingWorkspace.sessions);
 			} catch {
 				// Workspace state will be created on demand.
@@ -293,7 +287,7 @@ export async function createWorkspaceRegistry(deps: CreateWorkspaceRegistryDepen
 		_repoPath: string,
 	): Promise<RuntimeProjectTaskCounts> => {
 		try {
-			const board = await loadWorkspaceBoardById(workspaceId);
+			const board = await deps.workspaceStore.loadWorkspaceBoardById(workspaceId);
 			const persistedCounts = countTasksByColumn(board);
 			const terminalManager = getTerminalManagerForWorkspace(workspaceId);
 			if (!terminalManager) {
@@ -316,7 +310,7 @@ export async function createWorkspaceRegistry(deps: CreateWorkspaceRegistryDepen
 		workspaceId: string,
 		workspacePath: string,
 	): Promise<RuntimeWorkspaceStateResponse> => {
-		const response = await loadWorkspaceState(workspacePath);
+		const response = await deps.workspaceStore.loadWorkspaceState(workspacePath);
 		const terminalManager = await ensureTerminalManagerForWorkspace(workspaceId, workspacePath);
 		for (const summary of terminalManager.listSummaries()) {
 			response.sessions[summary.taskId] = summary;
@@ -325,7 +319,7 @@ export async function createWorkspaceRegistry(deps: CreateWorkspaceRegistryDepen
 	};
 
 	const buildProjectsPayload = async (preferredCurrentProjectId: string | null) => {
-		const projects = await listWorkspaceIndexEntries();
+		const projects = await deps.workspaceStore.listWorkspaceIndexEntries();
 		const fallbackProjectId =
 			projects.find((project) => project.workspaceId === activeWorkspaceId)?.workspaceId ??
 			projects[0]?.workspaceId ??
@@ -357,7 +351,7 @@ export async function createWorkspaceRegistry(deps: CreateWorkspaceRegistryDepen
 			onRemovedWorkspace?: (workspace: RemovedWorkspaceNotice) => void;
 		},
 	): Promise<ResolvedWorkspaceStreamTarget> => {
-		const allProjects = await listWorkspaceIndexEntries();
+		const allProjects = await deps.workspaceStore.listWorkspaceIndexEntries();
 		const existingProjects: RuntimeWorkspaceIndexEntry[] = [];
 		const removedProjects: RuntimeWorkspaceIndexEntry[] = [];
 
@@ -375,8 +369,8 @@ export async function createWorkspaceRegistry(deps: CreateWorkspaceRegistryDepen
 			}
 
 			removedProjects.push(project);
-			await removeWorkspaceIndexEntry(project.workspaceId);
-			await removeWorkspaceStateFiles(project.workspaceId);
+			await deps.workspaceStore.removeWorkspaceIndexEntry(project.workspaceId);
+			await deps.workspaceStore.removeWorkspaceStateFiles(project.workspaceId);
 			disposeWorkspace(project.workspaceId);
 			options?.onRemovedWorkspace?.({
 				workspaceId: project.workspaceId,

@@ -16,6 +16,7 @@ import {
 	parseWorktreeDeleteRequest,
 	parseWorktreeEnsureRequest,
 } from "../core/api-validation";
+import type { WorkspaceStore } from "../server/persistence/workspace-store";
 import { saveWorkspaceState, WorkspaceStateConflictError } from "../state/workspace-state";
 import type { TerminalSessionManager } from "../terminal/session-manager";
 import {
@@ -44,6 +45,7 @@ export interface CreateWorkspaceApiDependencies {
 	broadcastRuntimeWorkspaceStateUpdated: (workspaceId: string, workspacePath: string) => Promise<void> | void;
 	broadcastRuntimeProjectsUpdated: (preferredCurrentProjectId: string | null) => Promise<void> | void;
 	buildWorkspaceStateSnapshot: (workspaceId: string, workspacePath: string) => Promise<RuntimeWorkspaceStateResponse>;
+	workspaceStore?: Pick<WorkspaceStore, "saveWorkspaceState">;
 }
 
 function normalizeOptionalTaskWorkspaceScopeInput(
@@ -369,7 +371,10 @@ export function createWorkspaceApi(deps: CreateWorkspaceApiDependencies): Runtim
 				for (const summary of terminalManager.listSummaries()) {
 					input.sessions[summary.taskId] = summary;
 				}
-				const response = await saveWorkspaceState(workspaceScope.workspacePath, input);
+				const response = await (deps.workspaceStore?.saveWorkspaceState ?? saveWorkspaceState)(
+					workspaceScope.workspacePath,
+					input,
+				);
 				void deps.broadcastRuntimeWorkspaceStateUpdated(workspaceScope.workspaceId, workspaceScope.workspacePath);
 				void deps.broadcastRuntimeProjectsUpdated(workspaceScope.workspaceId);
 				return response;
