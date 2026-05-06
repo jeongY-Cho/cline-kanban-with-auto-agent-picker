@@ -99,7 +99,7 @@ export async function runLegacyJsonToSqliteMigration(log: (message: string) => v
 			const meta = workspaceMetaSchema.parse(metaRaw ?? { revision: 0, updatedAt: 0 });
 			const now = new Date(meta.updatedAt || Date.now());
 
-			await db.transaction(async (tx: typeof db) => {
+			await db.transaction(async (tx) => {
 				await tx
 					.insert(schema.workspaces)
 					.values({ id: workspaceId, repoPath: entry.repoPath, name: null, createdAt: now, updatedAt: now })

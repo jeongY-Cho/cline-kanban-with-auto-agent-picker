@@ -36,7 +36,8 @@ export function createSqliteWorkspaceStore(): WorkspaceStore {
 				.onConflictDoUpdate({
 					target: schema.workspaces.id,
 					set: { repoPath: context.repoPath, updatedAt: now },
-				});
+				})
+				.run();
 			return context;
 		},
 		loadWorkspaceContextById: async (workspaceId) => {
@@ -66,10 +67,9 @@ export function createSqliteWorkspaceStore(): WorkspaceStore {
 				.orderBy(asc(schema.cards.position), asc(schema.cards.id));
 			const cardsByCol = new Map<string, typeof cardRows>();
 			for (const c of cardRows) {
-				const columnId = unscopedColumnId(workspaceId, c.columnId);
-				const arr = cardsByCol.get(columnId) ?? [];
+				const arr = cardsByCol.get(c.columnId) ?? [];
 				arr.push(c);
-				cardsByCol.set(columnId, arr);
+				cardsByCol.set(c.columnId, arr);
 			}
 			return {
 				columns: cols.map((col) => ({
@@ -119,8 +119,7 @@ export function createSqliteWorkspaceStore(): WorkspaceStore {
 						.set({ updatedAt: now, version: next })
 						.where(
 							and(eq(schema.workspaces.id, context.workspaceId), eq(schema.workspaces.version, currentRevision)),
-						)
-						.run();
+						);
 					if (updated.changes === 0) throw new WorkspaceStateConflictError(currentRevision, currentRevision);
 				}
 				await tx.delete(schema.cards).where(eq(schema.cards.workspaceId, context.workspaceId));
